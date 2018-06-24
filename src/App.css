@@ -26,3 +26,14 @@
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+
+article.content {
+  margin: 10px auto;
+  max-width: 700px;
+}
+
+/* simulation level css */
+svg.simulation {
+  outline: thin solid red;
+  cursor: crosshair;
+}
