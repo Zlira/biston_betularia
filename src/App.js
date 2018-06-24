@@ -23,16 +23,32 @@ class Simulation extends Component {
     this.state = {
       creatures: Array(this.initialCreatureCount).fill().map(
         // TODO check the extreme values probability
-        () => Math.round(Math.random() * (this.createVarNum - 1))
+        (_, i) => ({
+          val: Math.round(Math.random() * (this.createVarNum - 1)),
+          id: i,
+        })
       )
     }
+
+    this.killCreature = this.killCreature.bind(this)
+  }
+
+  killCreature(creatureIndex) {
+    // TODO update for asynchronous state updates
+    const creatures = this.state.creatures.filter(
+      creature => creature.id !== creatureIndex
+    )
+    this.setState({
+      'creatures': creatures,
+    })
   }
 
   render() {
     const size = 400
     const creatures = this.state.creatures.map(
-      creature => <Creature fieldSize={size} colorScale={this.colorScale}
-       featureVal={creature}/>
+      creature => <Creature key={creature.id} fieldSize={size}
+        colorScale={this.colorScale} featureVal={creature.val}
+        id={creature.id} kill={this.killCreature}/>
     )
     return (<svg width={size} height={size} className='simulation'>
       <rect width={size} height={size} x="0" y="0"
@@ -54,7 +70,8 @@ class Creature extends Component {
       // TODO circles shouldn't collide with each other
       // or can they?
       <circle cx={this.initialCx} cy={this.initialCy} r={this.size}
-        fill={this.props.colorScale(this.props.featureVal)}/>
+        fill={this.props.colorScale(this.props.featureVal)}
+        onClick={() => this.props.kill(this.props.id)}/>
         //stroke="white" stroke-width={.2}/>
     )
   }
