@@ -18,6 +18,7 @@ class Simulation extends Component {
     super(props)
     this.createVarNum = 33
     this.initialCreatureCount = 30
+    this.maxCreatures = 300
     this.colorScale = scaleSequential(interpolateViridis)
       .domain([0, (this.createVarNum - 1)])
     this.state = {
@@ -31,6 +32,18 @@ class Simulation extends Component {
     }
 
     this.killCreature = this.killCreature.bind(this)
+    this.reproduceCreatures = this.reproduceCreatures.bind(this)
+  }
+
+  componentDidMount() {
+    this.timerID = setInterval(
+      () => this.reproduceCreatures(),
+      7000
+    );
+  }
+
+  componentWillUnmount() {
+    clearInterval(this.timerID)
   }
 
   killCreature(creatureIndex) {
@@ -41,6 +54,19 @@ class Simulation extends Component {
     this.setState({
       'creatures': creatures,
     })
+  }
+
+  reproduceCreatures() {
+    // TODO async update
+    const creatures = this.state.creatures.slice()
+    let maxId = Math.max(...creatures.map(cr => cr.id))
+    const creaturesNum = creatures.length
+    for (let i=0; i < creaturesNum; i++) {
+      if ((creaturesNum + i + 1) <= this.maxCreatures && Math.random() > .7) {
+        creatures.push({id: i+maxId+1, val: creatures[i].val})
+      }
+    }
+    this.setState({'creatures': creatures})
   }
 
   render() {
@@ -61,7 +87,7 @@ class Simulation extends Component {
 class Creature extends Component {
   constructor(props) {
     super(props)
-    this.size = 8
+    this.size = 9
     this.initialCx = Math.random() * (props.fieldSize - 2 * this.size) + this.size
     this.initialCy = Math.random() * (props.fieldSize - 2 * this.size) + this.size
   }
