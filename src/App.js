@@ -3,7 +3,35 @@ import './App.css';
 
 import {interpolateViridis} from 'd3-scale-chromatic';
 import {scaleSequential, scaleLinear} from 'd3-scale';
-import {histogram, max, range} from 'd3-array';
+import {histogram, range} from 'd3-array';
+import {randomUniform} from 'd3-random';
+
+function getRandomVelocity() {
+  return {
+    x: Math.round(randomUniform(-5, 5)()),
+    y: Math.round(randomUniform(-5, 5)()),
+  }
+}
+
+// TODO подумай, чи треба тут fieldSize, можливо задавати положення в
+// межах від 0 до 1, а потім множити на fieldSize?
+function getNewCreature(fieldSize, creatureVarsNum, id, val) {
+  val = val || Math.round(Math.random() * (creatureVarsNum - 1))
+  const radius = 9
+  const coords = {
+    x: Math.random() * (fieldSize - 2 * radius) + radius,
+    y: Math.random() * (fieldSize - 2 * radius) + radius,
+  }
+  return {
+    velocity: getRandomVelocity(),
+    radius: radius,
+    coords: coords,
+    val: val,
+    id: id,
+  }
+}
+
+
 
 class App extends Component {
   render() {
@@ -25,6 +53,8 @@ class App extends Component {
 class Simulation extends Component {
   constructor (props) {
     super(props)
+
+    this.size = 400
     this.creatureVarsNum = 17
     this.initialCreatureCount = 50
     this.maxCreatures = 300
@@ -33,13 +63,11 @@ class Simulation extends Component {
 
     this.colorScale = scaleSequential(interpolateViridis)
       .domain([0, (this.creatureVarsNum - 1)])
+    this.newCreature = getNewCreature.bind(null, this.size, this.creatureVarsNum)
     this.state = {
       creatures: Array(this.initialCreatureCount).fill().map(
         // TODO check the extreme values probability
-        (_, i) => ({
-          val: Math.round(Math.random() * (this.creatureVarsNum - 1)),
-          id: i,
-        })
+        (_, i) => this.newCreature(i)
       )
     }
 
@@ -67,53 +95,46 @@ class Simulation extends Component {
   }
 
   reproduceCreatures() {
-    // TODO async update
     const creatures = this.state.creatures.slice()
     let maxId = Math.max(...creatures.map(cr => cr.id))
     const creaturesNum = creatures.length
     for (let i=0; i < creaturesNum; i++) {
       if ((creaturesNum + i + 1) <= this.maxCreatures && Math.random() < this.reproduceProb) {
-        creatures.push({id: i+maxId+1, val: creatures[i].val})
+        creatures.push(this.newCreature(i+maxId+1, creatures[i].val))
       }
     }
     this.setState({'creatures': creatures})
   }
 
   render() {
-    const size = 400
     const creatures = this.state.creatures.map(
-      creature => <Creature key={creature.id} fieldSize={size}
-        colorScale={this.colorScale} featureVal={creature.val}
-        id={creature.id} kill={this.killCreature}/>
+      creature => <Creature key={creature.id}
+        colorScale={this.colorScale} creature={creature}
+        kill={this.killCreature}/>
     )
     return (<div>
-      <svg width={size} height={size} className='simulation'
+      <svg width={this.size} height={this.size} className='simulation'
         onDragStart={(e) => e.preventDefault()}>
-        <rect width={size} height={size} x="0" y="0"
+        <rect width={this.size} height={this.size} x="0" y="0"
           fill={this.colorScale(this.creatureVarsNum / 2)}/>
         {creatures}
       </svg>
-      <CreatureDistribution data={this.state.creatures} width={size}
+      <CreatureDistribution data={this.state.creatures} width={this.size}
         colorScale={this.colorScale} creatureVarsNum={this.creatureVarsNum}/>
     </div>)
   }
 }
 
 class Creature extends Component {
-  constructor(props) {
-    super(props)
-    this.size = 9
-    this.initialCx = Math.random() * (props.fieldSize - 2 * this.size) + this.size
-    this.initialCy = Math.random() * (props.fieldSize - 2 * this.size) + this.size
-  }
   render() {
+    const data = this.props.creature
+    const coords = data.coords
     return (
       // TODO circles shouldn't collide with each other
       // or can they?
-      <circle cx={this.initialCx} cy={this.initialCy} r={this.size}
-        fill={this.props.colorScale(this.props.featureVal)}
-        onClick={() => this.props.kill(this.props.id)}/>
-        //stroke="white" stroke-width={.2}/>
+      <circle cx={coords.x} cy={coords.y} r={data.radius}
+        fill={this.props.colorScale(data.val)}
+        onClick={() => this.props.kill(data.id)}/>
     )
   }
 }
@@ -134,7 +155,7 @@ class CreatureDistribution extends Component {
     // TODO improve scale to be consistent and nice
     const yScale = scaleLinear().range([0, height]).domain([0, .6])
     const rects = histData.map(
-      (d, i) => <rect x={i * rectWidth} y={height - yScale(d.length / this.props.data.length)}
+      (d, i) => <rect key={d.x0} x={i * rectWidth} y={height - yScale(d.length / this.props.data.length)}
                  width={rectWidth} height={yScale(d.length / this.props.data.length)}
                  fill={this.props.colorScale(i)}/>
     )
