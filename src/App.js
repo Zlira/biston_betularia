@@ -60,6 +60,7 @@ class Simulation extends Component {
     this.maxCreatures = 300
     this.reproduceTick = 2000
     this.reproduceProb = .05
+    this.moveTick = 200
 
     this.colorScale = scaleSequential(interpolateViridis)
       .domain([0, (this.creatureVarsNum - 1)])
@@ -73,16 +74,20 @@ class Simulation extends Component {
 
     this.killCreature = this.killCreature.bind(this)
     this.reproduceCreatures = this.reproduceCreatures.bind(this)
+    this.moveCreatures = this.moveCreatures.bind(this)
   }
 
   componentDidMount() {
-    this.timerID = setInterval(
+    this.reproduceTimerID = setInterval(
       () => this.reproduceCreatures(), this.reproduceTick
     );
+    this.moveTimerID = setInterval(
+      () => this.moveCreatures(), this.moveTick
+    )
   }
 
   componentWillUnmount() {
-    clearInterval(this.timerID)
+    clearInterval(this.reproduceTimerID)
   }
 
   killCreature(creatureIndex) {
@@ -95,15 +100,34 @@ class Simulation extends Component {
   }
 
   reproduceCreatures() {
-    const creatures = this.state.creatures.slice()
-    let maxId = Math.max(...creatures.map(cr => cr.id))
-    const creaturesNum = creatures.length
-    for (let i=0; i < creaturesNum; i++) {
-      if ((creaturesNum + i + 1) <= this.maxCreatures && Math.random() < this.reproduceProb) {
-        creatures.push(this.newCreature(i+maxId+1, creatures[i].val))
+    this.setState((prevState, props) => {
+      const creatures = prevState.creatures.slice()
+      let maxId = Math.max(...creatures.map(cr => cr.id))
+      const creaturesNum = creatures.length
+      for (let i=0; i < creaturesNum; i++) {
+        if ((creaturesNum + i + 1) <= this.maxCreatures && Math.random() < this.reproduceProb) {
+          creatures.push(this.newCreature(i+maxId+1, creatures[i].val))
+        }
       }
-    }
-    this.setState({'creatures': creatures})
+      return {'creatures': creatures}
+    })
+  }
+
+  moveCreatures() {
+    this.setState((prevState, props) => {
+      const creatures = prevState.creatures
+      const newCreatures = []
+      for (let creature of creatures) {
+        newCreatures.push({
+          ...creature,
+          coords: {
+            x: creature.coords.x + creature.velocity.x,
+            y: creature.coords.y + creature.velocity.y,
+          }
+        })
+      }
+      return {'creatures': newCreatures}
+    })
   }
 
   render() {
@@ -153,7 +177,7 @@ class CreatureDistribution extends Component {
     const width = this.props.width
     const rectWidth = width / this.binCount
     // TODO improve scale to be consistent and nice
-    const yScale = scaleLinear().range([0, height]).domain([0, .6])
+    const yScale = scaleLinear().range([0, height]).domain([0, .4])
     const rects = histData.map(
       (d, i) => <rect key={d.x0} x={i * rectWidth} y={height - yScale(d.length / this.props.data.length)}
                  width={rectWidth} height={yScale(d.length / this.props.data.length)}
