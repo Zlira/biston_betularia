@@ -7,9 +7,10 @@ import {histogram, range} from 'd3-array';
 import {randomUniform} from 'd3-random';
 
 function getRandomVelocity() {
+  const maxSpeed = 2
   return {
-    x: Math.round(randomUniform(-5, 5)()),
-    y: Math.round(randomUniform(-5, 5)()),
+    x: Math.round(randomUniform(-maxSpeed, maxSpeed)()),
+    y: Math.round(randomUniform(-maxSpeed, maxSpeed)()),
   }
 }
 
@@ -31,6 +32,36 @@ function getNewCreature(fieldSize, creatureVarsNum, id, val) {
   }
 }
 
+
+function handleFieldSideCollision(fieldSize, creature, direction) {
+  const coords = creature.coords
+  const velocity = creature.velocity
+  let newVelocity = velocity[direction]
+  let newCoord = coords[direction] + newVelocity
+
+  if (newCoord - creature.radius < newVelocity) {
+    newVelocity = -newVelocity
+    newCoord = creature.radius
+  } else if (newCoord + creature.radius > fieldSize - newVelocity) {
+    newVelocity = -newVelocity
+    newCoord = fieldSize - creature.radius
+  }
+  return {
+    ['coord' + direction.toUpperCase()]: newCoord,
+    ['velocity' + direction.toUpperCase()]: newVelocity,
+  }
+}
+
+function moveCreature(fieldSize, creature) {
+  let {coordX, velocityX} = handleFieldSideCollision(fieldSize, creature, 'x')
+  let {coordY, velocityY} = handleFieldSideCollision(fieldSize, creature, 'y')
+
+  return {
+    ...creature,
+    velocity: {x: velocityX, y: velocityY},
+    coords: {x: coordX, y: coordY},
+  }
+}
 
 
 class App extends Component {
@@ -60,7 +91,7 @@ class Simulation extends Component {
     this.maxCreatures = 300
     this.reproduceTick = 2000
     this.reproduceProb = .05
-    this.moveTick = 200
+    this.moveTick = 150
 
     this.colorScale = scaleSequential(interpolateViridis)
       .domain([0, (this.creatureVarsNum - 1)])
@@ -118,13 +149,7 @@ class Simulation extends Component {
       const creatures = prevState.creatures
       const newCreatures = []
       for (let creature of creatures) {
-        newCreatures.push({
-          ...creature,
-          coords: {
-            x: creature.coords.x + creature.velocity.x,
-            y: creature.coords.y + creature.velocity.y,
-          }
-        })
+        newCreatures.push(moveCreature(this.size, creature))
       }
       return {'creatures': newCreatures}
     })
