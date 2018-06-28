@@ -22,6 +22,8 @@ import {pairs} from './CollisionPairs';
 // TODO move all the options to one object to be able to tweak them
 // TODO think of better population dynamics: death and birth dependent on
 // population density etc
+// TODO можливо показати варіант, коли норма зміщується без селективного тиску
+// TODO порефакторити: логіку для руху, розмноження etc - окремо
 
 function getRandomVelocity() {
   const maxSpeed = 2
@@ -138,9 +140,11 @@ class Simulation extends Component {
     this.killCreature = this.killCreature.bind(this)
     this.updatePopulation = this.updatePopulation.bind(this)
     this.moveCreatures = this.moveCreatures.bind(this)
+    this.start = this.start.bind(this)
+    this.stop = this.stop.bind(this)
   }
 
-  componentDidMount() {
+  start() {
     this.populUpdateTimerID = setInterval(
       () => this.updatePopulation(), this.populUpdateTick
     );
@@ -149,9 +153,13 @@ class Simulation extends Component {
     )
   }
 
-  componentWillUnmount() {
+  stop() {
     clearInterval(this.populUpdateTimerID)
     clearInterval(this.moveTimerID)
+  }
+
+  componentWillUnmount() {
+    this.stop()
   }
 
   killCreature(creatureIndex) {
@@ -213,6 +221,10 @@ class Simulation extends Component {
         kill={this.killCreature}/>
     )
     return (<div>
+      <div>
+        <button onClick={this.start}>Старт</button>
+        <button onClick={this.stop}>Стоп</button>
+      </div>
       <svg width={this.size} height={this.size} className='simulation'
         onDragStart={(e) => e.preventDefault()}>
         <rect width={this.size} height={this.size} x="0" y="0"
