@@ -118,10 +118,11 @@ class Simulation extends Component {
     this.creatureVarsNum = 13
     this.initialCreatureCount = 60
     this.maxCreatures = 200
-    this.populUpdateTick = 2000
+    this.populUpdateTick = 200
     this.reproduceProb = .07
     this.deathProb = .005
-    this.moveTick = 70
+    this.moveTick = 20
+    this.maturityAge = 5
 
     this.colorScale = scaleSequential(interpolateViridis)
       .domain([0, (this.creatureVarsNum - 1)])
@@ -174,7 +175,9 @@ class Simulation extends Component {
       const creaturesNum = creatures.length
       const maxId = Math.max(...creatures.map(cr => cr.id))
       for (let i=0; i < creaturesNum; i++) {
-        if ((creaturesNum + i + 1) <= this.maxCreatures && Math.random() < this.reproduceProb) {
+        if ((creaturesNum + i + 1) <= this.maxCreatures
+            && Math.random() < this.reproduceProb
+            && creatures[i].lifespan >= this.maturityAge) {
           creatures.push(getCreaturesChild(this.size, creatures[i], i+maxId+1))
         }
       }
