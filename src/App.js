@@ -5,6 +5,14 @@ import {interpolateViridis} from 'd3-scale-chromatic';
 import {scaleSequential, scaleLinear} from 'd3-scale';
 import {histogram, range} from 'd3-array';
 import {randomUniform} from 'd3-random';
+import {getRandomPolygenes, polygenesToPhenotype, polygenesOffspring} from './Polygenes';
+
+
+// TODO додати контроль клавіатурою
+// TODO додати перешкоди або окрему смугу для «полювання»
+// TODO додати історію розподілу, разом із кількістю впольованих в кожен момент часу
+// TODO потестувати швидкодію і навантаження
+// TODO додати смерть тваринок від старості
 
 
 function getRandomVelocity() {
@@ -17,19 +25,23 @@ function getRandomVelocity() {
 
 // TODO подумай, чи треба тут fieldSize, можливо задавати положення в
 // межах від 0 до 1, а потім множити на fieldSize?
-function getNewCreature(fieldSize, creatureVarsNum, id, val) {
-  val = val || Math.round(Math.random() * (creatureVarsNum - 1))
+function getNewCreature(fieldSize, creatureVarsNum, id, phenotype) {
+  phenotype = phenotype || Math.round(Math.random() * (creatureVarsNum - 1))
   const radius = 9
   const coords = {
     x: Math.random() * (fieldSize - 2 * radius) + radius,
     y: Math.random() * (fieldSize - 2 * radius) + radius,
   }
+  const genotype = getRandomPolygenes((creatureVarsNum - 1) / 2)
   return {
     velocity: getRandomVelocity(),
     radius: radius,
     coords: coords,
-    val: val,
+    genotype: genotype,
+    // TODO rename to phenotype
+    phenotype: polygenesToPhenotype(genotype),
     id: id,
+
   }
 }
 
@@ -38,8 +50,12 @@ function getCreaturesChild(fieldSize, creature, id) {
     x: -creature.velocity.x * randomUniform(8, 12)() / 10,
     y: -creature.velocity.y * randomUniform(8, 12)() / 10,
   }
+  // self fertilization
+  const genotype = polygenesOffspring(creature.genotype, creature.genotype)
   return {
     ...creature,
+    phenotype: polygenesToPhenotype(genotype),
+    genotype: genotype,
     velocity: velocity,
     id: id,
   }
@@ -86,25 +102,16 @@ class App extends Component {
   }
 }
 
-// TODO зараз чисельність популяції постійно зростає, це ОК?
-// TODO додати рух
-// TODO додати контроль клавіатурою
-// TODO додати розмноження генетикою (можливо статеве)
-// TODO додати перешкоди або окрему смугу для «полювання»
-// TODO додати історію розподілу
-// TODO потестувати швидкодію і навантаження
-
-
 class Simulation extends Component {
   constructor (props) {
     super(props)
 
     this.size = 400
-    this.creatureVarsNum = 11
+    this.creatureVarsNum = 13
     this.initialCreatureCount = 100
     this.maxCreatures = 200
     this.reproduceTick = 2000
-    this.reproduceProb = .05
+    this.reproduceProb = .5
     this.moveTick = 70
 
     this.colorScale = scaleSequential(interpolateViridis)
@@ -196,7 +203,7 @@ class Creature extends Component {
       // TODO circles shouldn't collide with each other
       // or can they?
       <circle cx={coords.x} cy={coords.y} r={data.radius}
-        fill={this.props.colorScale(data.val)}
+        fill={this.props.colorScale(data.phenotype)}
         onClick={() => this.props.kill(data.id)}/>
     )
   }
@@ -206,7 +213,7 @@ class CreatureDistribution extends Component {
   constructor(props) {
     super(props)
     this.binCount = props.creatureVarsNum
-    this.histGenerator = histogram().value(d => d.val)
+    this.histGenerator = histogram().value(d => d.phenotype)
       .thresholds(range(1, this.binCount))
       .domain([0, this.binCount])
   }
