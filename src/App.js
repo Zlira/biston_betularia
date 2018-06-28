@@ -10,10 +10,16 @@ import {getRandomPolygenes, polygenesToPhenotype, polygenesOffspring} from './Po
 
 // TODO додати контроль клавіатурою
 // TODO додати перешкоди або окрему смугу для «полювання»
-// TODO додати історію розподілу, разом із кількістю впольованих в кожен момент часу
+// TODO додати історію розподілу
+// TODO додати кількість впольованих в кожен момент часу до історії розподілу
 // TODO потестувати швидкодію і навантаження
-// TODO додати смерть тваринок від старості
-
+// TODO подумати над ігровими компонентами:
+// * кнопка старт
+// * таймер
+// * резульат: вижила/не вижила
+// TODO move all the options to one object to be able to tweak them
+// TODO think of better population dynamics: death and birth dependent on
+// population density etc
 
 function getRandomVelocity() {
   const maxSpeed = 2
@@ -41,11 +47,12 @@ function getNewCreature(fieldSize, creatureVarsNum, id, phenotype) {
     // TODO rename to phenotype
     phenotype: polygenesToPhenotype(genotype),
     id: id,
-
+    lifespan: 0,
   }
 }
 
 function getCreaturesChild(fieldSize, creature, id) {
+  // velocity opposite to the parent but a little changed in random direction
   const velocity = {
     x: -creature.velocity.x * randomUniform(8, 12)() / 10,
     y: -creature.velocity.y * randomUniform(8, 12)() / 10,
@@ -58,6 +65,7 @@ function getCreaturesChild(fieldSize, creature, id) {
     genotype: genotype,
     velocity: velocity,
     id: id,
+    lifespan: 0,
   }
 }
 
@@ -108,10 +116,11 @@ class Simulation extends Component {
 
     this.size = 400
     this.creatureVarsNum = 13
-    this.initialCreatureCount = 100
+    this.initialCreatureCount = 60
     this.maxCreatures = 200
-    this.reproduceTick = 2000
-    this.reproduceProb = .5
+    this.populUpdateTick = 2000
+    this.reproduceProb = .07
+    this.deathProb = .005
     this.moveTick = 70
 
     this.colorScale = scaleSequential(interpolateViridis)
@@ -119,19 +128,18 @@ class Simulation extends Component {
     this.newCreature = getNewCreature.bind(null, this.size, this.creatureVarsNum)
     this.state = {
       creatures: Array(this.initialCreatureCount).fill().map(
-        // TODO check the extreme values probability
         (_, i) => this.newCreature(i)
       )
     }
 
     this.killCreature = this.killCreature.bind(this)
-    this.reproduceCreatures = this.reproduceCreatures.bind(this)
+    this.updatePopulation = this.updatePopulation.bind(this)
     this.moveCreatures = this.moveCreatures.bind(this)
   }
 
   componentDidMount() {
-    this.reproduceTimerID = setInterval(
-      () => this.reproduceCreatures(), this.reproduceTick
+    this.populUpdateTimerID = setInterval(
+      () => this.updatePopulation(), this.populUpdateTick
     );
     this.moveTimerID = setInterval(
       () => this.moveCreatures(), this.moveTick
@@ -139,7 +147,8 @@ class Simulation extends Component {
   }
 
   componentWillUnmount() {
-    clearInterval(this.reproduceTimerID)
+    clearInterval(this.populUpdateTimerID)
+    clearInterval(this.moveTimerID)
   }
 
   killCreature(creatureIndex) {
@@ -151,11 +160,19 @@ class Simulation extends Component {
     })
   }
 
-  reproduceCreatures() {
+  updatePopulation() {
     this.setState((prevState, props) => {
-      const creatures = prevState.creatures.slice()
-      let maxId = Math.max(...creatures.map(cr => cr.id))
+      const creatures = prevState.creatures
+        // some creatures die randomly
+        // TODO think of better function for life/death decision
+        .filter(cr => !(Math.random() < cr.lifespan * this.deathProb))
+        // others lifespan is updated
+        .map(cr => ({...cr, lifespan: cr.lifespan + 1}))
+
+      console.log(prevState.creatures.length, creatures.length)
+      // the ones left alive can reproduce randomly
       const creaturesNum = creatures.length
+      const maxId = Math.max(...creatures.map(cr => cr.id))
       for (let i=0; i < creaturesNum; i++) {
         if ((creaturesNum + i + 1) <= this.maxCreatures && Math.random() < this.reproduceProb) {
           creatures.push(getCreaturesChild(this.size, creatures[i], i+maxId+1))
@@ -217,6 +234,7 @@ class CreatureDistribution extends Component {
       .thresholds(range(1, this.binCount))
       .domain([0, this.binCount])
   }
+
   render() {
     const histData = this.histGenerator(this.props.data)
     const height = 100
