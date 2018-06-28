@@ -6,11 +6,12 @@ import {scaleSequential, scaleLinear} from 'd3-scale';
 import {histogram, range} from 'd3-array';
 import {randomUniform} from 'd3-random';
 
+
 function getRandomVelocity() {
   const maxSpeed = 2
   return {
-    x: Math.round(randomUniform(-maxSpeed, maxSpeed)()),
-    y: Math.round(randomUniform(-maxSpeed, maxSpeed)()),
+    x: randomUniform(maxSpeed/2, maxSpeed)() * (Math.random() < 0.5? 1: -1),
+    y: randomUniform(maxSpeed/2, maxSpeed)() * (Math.random() < 0.5? 1: -1),
   }
 }
 
@@ -32,6 +33,18 @@ function getNewCreature(fieldSize, creatureVarsNum, id, val) {
   }
 }
 
+function getCreaturesChild(fieldSize, creature, id) {
+  const velocity = {
+    x: -creature.velocity.x * randomUniform(8, 12)() / 10,
+    y: -creature.velocity.y * randomUniform(8, 12)() / 10,
+  }
+  return {
+    ...creature,
+    velocity: velocity,
+    id: id,
+  }
+}
+
 
 function handleFieldSideCollision(fieldSize, creature, direction) {
   const coords = creature.coords
@@ -41,7 +54,8 @@ function handleFieldSideCollision(fieldSize, creature, direction) {
 
   if (newCoord - creature.radius < newVelocity) {
     newVelocity = -newVelocity
-    newCoord = creature.radius
+    // TODO why is this +1 needed
+    newCoord = creature.radius + 1
   } else if (newCoord + creature.radius > fieldSize - newVelocity) {
     newVelocity = -newVelocity
     newCoord = fieldSize - creature.radius
@@ -86,12 +100,12 @@ class Simulation extends Component {
     super(props)
 
     this.size = 400
-    this.creatureVarsNum = 17
-    this.initialCreatureCount = 50
-    this.maxCreatures = 300
+    this.creatureVarsNum = 11
+    this.initialCreatureCount = 100
+    this.maxCreatures = 200
     this.reproduceTick = 2000
     this.reproduceProb = .05
-    this.moveTick = 150
+    this.moveTick = 70
 
     this.colorScale = scaleSequential(interpolateViridis)
       .domain([0, (this.creatureVarsNum - 1)])
@@ -137,7 +151,7 @@ class Simulation extends Component {
       const creaturesNum = creatures.length
       for (let i=0; i < creaturesNum; i++) {
         if ((creaturesNum + i + 1) <= this.maxCreatures && Math.random() < this.reproduceProb) {
-          creatures.push(this.newCreature(i+maxId+1, creatures[i].val))
+          creatures.push(getCreaturesChild(this.size, creatures[i], i+maxId+1))
         }
       }
       return {'creatures': creatures}
