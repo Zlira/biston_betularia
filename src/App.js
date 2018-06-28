@@ -6,8 +6,10 @@ import {scaleSequential, scaleLinear} from 'd3-scale';
 import {histogram, range} from 'd3-array';
 import {randomUniform} from 'd3-random';
 import {getRandomPolygenes, polygenesToPhenotype, polygenesOffspring} from './Polygenes';
+import {pairs} from './CollisionPairs';
 
 
+// TODO розмір залежний від віку?
 // TODO додати контроль клавіатурою
 // TODO додати перешкоди або окрему смугу для «полювання»
 // TODO додати історію розподілу
@@ -51,21 +53,21 @@ function getNewCreature(fieldSize, creatureVarsNum, id, phenotype) {
   }
 }
 
-function getCreaturesChild(fieldSize, creature, id) {
-  // velocity opposite to the parent but a little changed in random direction
-  const velocity = {
-    x: -creature.velocity.x * randomUniform(8, 12)() / 10,
-    y: -creature.velocity.y * randomUniform(8, 12)() / 10,
-  }
-  // self fertilization
-  const genotype = polygenesOffspring(creature.genotype, creature.genotype)
+
+function reproduce(cr1, cr2, id) {
+  const genotype = polygenesOffspring(cr1.genotype, cr2.genotype)
   return {
-    ...creature,
-    phenotype: polygenesToPhenotype(genotype),
+    coords: {
+      x: (cr1.coords.x + cr2.coords.x) / 2,
+      y: (cr1.coords.y + cr2.coords.y) / 2,
+    },
+    // TODO is this OK?
+    velocity: getRandomVelocity(),
     genotype: genotype,
-    velocity: velocity,
+    phenotype: polygenesToPhenotype(genotype),
     id: id,
     lifespan: 0,
+    radius: cr1.radius,
   }
 }
 
@@ -115,14 +117,14 @@ class Simulation extends Component {
     super(props)
 
     this.size = 400
-    this.creatureVarsNum = 13
-    this.initialCreatureCount = 60
-    this.maxCreatures = 200
-    this.populUpdateTick = 200
-    this.reproduceProb = .07
-    this.deathProb = .005
-    this.moveTick = 20
-    this.maturityAge = 5
+    this.creatureVarsNum = 7
+    this.initialCreatureCount = 50
+    this.maxCreatures = 100
+    this.populUpdateTick = 1000
+    this.reproduceProb = .7
+    this.deathProb = .002
+    this.moveTick = 70
+    this.maturityAge = 4
 
     this.colorScale = scaleSequential(interpolateViridis)
       .domain([0, (this.creatureVarsNum - 1)])
@@ -169,16 +171,24 @@ class Simulation extends Component {
         .filter(cr => !(Math.random() < cr.lifespan * this.deathProb))
         // others lifespan is updated
         .map(cr => ({...cr, lifespan: cr.lifespan + 1}))
-
       console.log(prevState.creatures.length, creatures.length)
+
       // the ones left alive can reproduce randomly
       const creaturesNum = creatures.length
       const maxId = Math.max(...creatures.map(cr => cr.id))
-      for (let i=0; i < creaturesNum; i++) {
-        if ((creaturesNum + i + 1) <= this.maxCreatures
+      const crPairs = pairs(creatures)
+
+      let cr1, cr2, newCr, offspringCounter = 1
+      for (let p of crPairs) {
+        [cr1, cr2] = p
+        if (creaturesNum + offspringCounter <= this.maxCreatures
             && Math.random() < this.reproduceProb
-            && creatures[i].lifespan >= this.maturityAge) {
-          creatures.push(getCreaturesChild(this.size, creatures[i], i+maxId+1))
+            && cr1.lifespan >= this.maturityAge
+            && cr2.lifespan >= this.maturityAge) {
+          newCr = reproduce(cr1, cr2, offspringCounter+maxId)
+          console.log(newCr)
+          creatures.push(newCr)
+          offspringCounter += 1
         }
       }
       return {'creatures': creatures}
@@ -220,9 +230,8 @@ class Creature extends Component {
     const data = this.props.creature
     const coords = data.coords
     return (
-      // TODO circles shouldn't collide with each other
-      // or can they?
       <circle cx={coords.x} cy={coords.y} r={data.radius}
+        stroke={data.lifespan === 0? 'white' : null}
         fill={this.props.colorScale(data.phenotype)}
         onClick={() => this.props.kill(data.id)}/>
     )
@@ -248,7 +257,7 @@ class CreatureDistribution extends Component {
     const rects = histData.map(
       (d, i) => <rect key={d.x0} x={i * rectWidth} y={height - yScale(d.length / this.props.data.length)}
                  width={rectWidth} height={yScale(d.length / this.props.data.length)}
-                 fill={this.props.colorScale(i)}/>
+                 fill={this.props.colorScale(i)} />
     )
     return (
       <svg width={width} height={height} onDragStart={(e) => e.preventDefault()}>
