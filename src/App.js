@@ -5,9 +5,37 @@ import {interpolateViridis} from 'd3-scale-chromatic';
 import {scaleSequential, scaleLinear} from 'd3-scale';
 import {histogram, range} from 'd3-array';
 import {randomUniform} from 'd3-random';
+
 import {getRandomPolygenes, polygenesToPhenotype, polygenesOffspring} from './Polygenes';
 import {pairs} from './CollisionPairs';
+import {randomChoice} from './Utils.js'
 
+
+const GAME_PARAMS = {
+  // creatures' velocity
+  getSpeed: function() {
+    const maxSpeed = 2
+    const minSpeed = maxSpeed / 2
+    return randomUniform(minSpeed, maxSpeed)() * randomChoice([-1, 1])
+  },
+  moveTick: 70,
+
+  // creatures' attrs
+  crSize: 9,
+  crColors: scaleSequential(interpolateViridis),
+
+  // population params
+  crVarNum: 7,
+  crInitCount: 50,
+  crMaxCount: 200,
+  crReproduceProb: .7,
+  crDeathProb: .002,
+  crMaturityAge: 4,
+  populUpdateTick: 1000,
+
+  // TODO add field width and height
+  fieldSize: 400,
+}
 
 // TODO розмір залежний від віку?
 // TODO додати контроль клавіатурою
@@ -24,12 +52,13 @@ import {pairs} from './CollisionPairs';
 // population density etc
 // TODO можливо показати варіант, коли норма зміщується без селективного тиску
 // TODO порефакторити: логіку для руху, розмноження etc - окремо
+// TODO пересвідчитися, що в популяції на початку є всі можливі алелі
 
 function getRandomVelocity() {
   const maxSpeed = 2
   return {
-    x: randomUniform(maxSpeed/2, maxSpeed)() * (Math.random() < 0.5? 1: -1),
-    y: randomUniform(maxSpeed/2, maxSpeed)() * (Math.random() < 0.5? 1: -1),
+    x: GAME_PARAMS.getSpeed(),
+    y: GAME_PARAMS.getSpeed(),
   }
 }
 
@@ -37,7 +66,7 @@ function getRandomVelocity() {
 // межах від 0 до 1, а потім множити на fieldSize?
 function getNewCreature(fieldSize, creatureVarsNum, id, phenotype) {
   phenotype = phenotype || Math.round(Math.random() * (creatureVarsNum - 1))
-  const radius = 9
+  const radius = GAME_PARAMS.crSize
   const coords = {
     x: Math.random() * (fieldSize - 2 * radius) + radius,
     y: Math.random() * (fieldSize - 2 * radius) + radius,
@@ -55,7 +84,6 @@ function getNewCreature(fieldSize, creatureVarsNum, id, phenotype) {
   }
 }
 
-
 function reproduce(cr1, cr2, id) {
   const genotype = polygenesOffspring(cr1.genotype, cr2.genotype)
   return {
@@ -72,7 +100,6 @@ function reproduce(cr1, cr2, id) {
     radius: cr1.radius,
   }
 }
-
 
 function handleFieldSideCollision(fieldSize, creature, direction) {
   const coords = creature.coords
@@ -118,18 +145,17 @@ class Simulation extends Component {
   constructor (props) {
     super(props)
 
-    this.size = 400
-    this.creatureVarsNum = 7
-    this.initialCreatureCount = 50
-    this.maxCreatures = 100
-    this.populUpdateTick = 1000
-    this.reproduceProb = .7
-    this.deathProb = .002
-    this.moveTick = 70
-    this.maturityAge = 4
+    this.size = GAME_PARAMS.fieldSize
+    this.creatureVarsNum = GAME_PARAMS.crVarNum
+    this.initialCreatureCount = GAME_PARAMS.crInitCount
+    this.maxCreatures = GAME_PARAMS.crMaxCount
+    this.reproduceProb = GAME_PARAMS.crReproduceProb
+    this.deathProb = GAME_PARAMS.crDeathProb
+    this.maturityAge = GAME_PARAMS.crMaturityAge
+    this.populUpdateTick = GAME_PARAMS.populUpdateTick
+    this.moveTick = GAME_PARAMS.moveTick
+    this.colorScale = GAME_PARAMS.crColors.domain([0, (this.creatureVarsNum - 1)])
 
-    this.colorScale = scaleSequential(interpolateViridis)
-      .domain([0, (this.creatureVarsNum - 1)])
     this.newCreature = getNewCreature.bind(null, this.size, this.creatureVarsNum)
     this.state = {
       creatures: Array(this.initialCreatureCount).fill().map(
@@ -237,6 +263,7 @@ class Simulation extends Component {
   }
 }
 
+
 class Creature extends Component {
   render() {
     const data = this.props.creature
@@ -249,6 +276,7 @@ class Creature extends Component {
     )
   }
 }
+
 
 class CreatureDistribution extends Component {
   constructor(props) {

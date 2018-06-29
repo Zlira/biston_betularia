@@ -6,10 +6,7 @@
 // }
 import {sum} from 'd3-array'
 
-// TODO move to some kind of utils
-function randomChoice(options) {
-  return options[Math.round(Math.random() * (options.length - 1))]
-}
+import {randomChoice} from './Utils.js'
 
 
 function getRandomPolygeneGenotype() {
