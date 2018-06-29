@@ -40,3 +40,7 @@ svg.simulation {
 svg g.obstacle-layer, svg g.obstacle-layer image {
   pointer-events: none;
 }
+
+.creature-distribution input {
+  display: block;
+}

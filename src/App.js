@@ -3,7 +3,7 @@ import './App.css';
 
 import {interpolateViridis} from 'd3-scale-chromatic';
 import {scaleSequential, scaleLinear} from 'd3-scale';
-import {histogram, range} from 'd3-array';
+import {histogram, range, sum} from 'd3-array';
 import {randomUniform} from 'd3-random';
 
 import {getRandomPolygenes, polygenesToPhenotype, polygenesOffspring} from './Polygenes';
@@ -26,7 +26,7 @@ const GAME_PARAMS = {
   crColors: scaleSequential(interpolateViridis),
 
   // population params
-  crVarNum: 7,
+  crVarNum: 9,
   crInitCount: 60,
   crMaxCount: 100,
   crReproduceProb: .7,
@@ -34,27 +34,9 @@ const GAME_PARAMS = {
   crMaturityAge: 4,
   populUpdateTick: 1000,
 
-  // TODO add field width and height
   fieldSize: 500,
 }
 
-// TODO перенести всі todo у trello
-// TODO розмір залежний від віку?
-// TODO додати контроль клавіатурою
-// TODO додати перешкоди або окрему смугу для «полювання»
-// TODO додати історію розподілу
-// TODO додати кількість впольованих в кожен момент часу до історії розподілу
-// TODO потестувати швидкодію і навантаження
-// TODO подумати над ігровими компонентами:
-// * кнопка старт
-// * таймер
-// * резульат: вижила/не вижила
-// TODO move all the options to one object to be able to tweak them
-// TODO think of better population dynamics: death and birth dependent on
-// population density etc
-// TODO можливо показати варіант, коли норма зміщується без селективного тиску
-// TODO порефакторити: логіку для руху, розмноження etc - окремо
-// TODO пересвідчитися, що в популяції на початку є всі можливі алелі
 
 function getRandomVelocity() {
   return {
@@ -145,6 +127,7 @@ class App extends Component {
 class Simulation extends Component {
   constructor (props) {
     super(props)
+    this.running = false
 
     this.size = GAME_PARAMS.fieldSize
     this.creatureVarsNum = GAME_PARAMS.crVarNum
@@ -155,14 +138,20 @@ class Simulation extends Component {
     this.maturityAge = GAME_PARAMS.crMaturityAge
     this.populUpdateTick = GAME_PARAMS.populUpdateTick
     this.moveTick = GAME_PARAMS.moveTick
+
     this.colorScale = GAME_PARAMS.crColors.domain([0, (this.creatureVarsNum - 1)])
+    this.histGenerator = histogram().value(d => d.phenotype)
+      .thresholds(range(1, this.creatureVarsNum))
+      .domain([0, this.creatureVarsNum])
 
     this.newCreature = getNewCreature.bind(null, this.size, this.creatureVarsNum)
     this.state = {
       creatures: Array(this.initialCreatureCount).fill().map(
         (_, i) => this.newCreature(i)
-      )
+      ),
+      history: [],
     }
+    this.state.history.push(this.histGenerator(this.state.creatures))
 
     this.killCreature = this.killCreature.bind(this)
     this.updatePopulation = this.updatePopulation.bind(this)
@@ -172,6 +161,7 @@ class Simulation extends Component {
   }
 
   start() {
+    this.running = true
     if (!this.populUpdateTimerID) {
       this.populUpdateTimerID = setInterval(
         this.updatePopulation, this.populUpdateTick
@@ -183,8 +173,11 @@ class Simulation extends Component {
   }
 
   stop() {
+    this.running = false
     clearInterval(this.populUpdateTimerID)
     clearInterval(this.moveTimerID)
+    delete this.populUpdateTimerID
+    delete this.moveTimerID
   }
 
   componentWillUnmount() {
@@ -192,6 +185,7 @@ class Simulation extends Component {
   }
 
   killCreature(creatureIndex) {
+    if (!this.running) {return}
     this.setState((prevState, props) => {
       const creatures = prevState.creatures.filter(
         creature => creature.id !== creatureIndex
@@ -208,7 +202,6 @@ class Simulation extends Component {
         .filter(cr => !(Math.random() < cr.lifespan * this.deathProb))
         // others lifespan is updated
         .map(cr => ({...cr, lifespan: cr.lifespan + 1}))
-      console.log(prevState.creatures.length, creatures.length)
 
       // the ones left alive can reproduce randomly
       const creaturesNum = creatures.length
@@ -223,12 +216,14 @@ class Simulation extends Component {
             && cr1.lifespan >= this.maturityAge
             && cr2.lifespan >= this.maturityAge) {
           newCr = reproduce(cr1, cr2, offspringCounter+maxId)
-          console.log(newCr)
           creatures.push(newCr)
           offspringCounter += 1
         }
       }
-      return {'creatures': creatures}
+      return {
+        'creatures': creatures,
+        'history': prevState.history.concat([this.histGenerator(creatures)]),
+      }
     })
   }
 
@@ -263,14 +258,15 @@ class Simulation extends Component {
         </g>
         <Obstacles size={this.size}/>
       </svg>
-      <CreatureDistribution data={this.state.creatures} width={this.size}
-        colorScale={this.colorScale} creatureVarsNum={this.creatureVarsNum}/>
+      <CreatureDistribution data={this.state.history} width={this.size}
+        colorScale={this.colorScale}/>
     </div>)
   }
 }
 
 
 function Obstacles(props) {
+  // TODO ignore clicking on Obstacles but allow clicking on anything else
   return <g className="obstacle-layer">
     <image xlinkHref={treesSvg} x="0" y="0" width={props.size}
       height={props.size}/>
@@ -284,7 +280,6 @@ class Creature extends Component {
     const coords = data.coords
     return (
       <circle cx={coords.x} cy={coords.y} r={data.radius}
-        stroke={data.lifespan === 0? 'white' : null}
         fill={this.props.colorScale(data.phenotype)}
         onClick={() => this.props.kill(data.id)}/>
     )
@@ -295,28 +290,39 @@ class Creature extends Component {
 class CreatureDistribution extends Component {
   constructor(props) {
     super(props)
-    this.binCount = props.creatureVarsNum
-    this.histGenerator = histogram().value(d => d.phenotype)
-      .thresholds(range(1, this.binCount))
-      .domain([0, this.binCount])
+    this.state = {historyIndex: 0}
+
+    this.handleChange = this.handleChange.bind(this)
+  }
+
+  handleChange(event) {
+    this.setState({historyIndex: event.target.value})
   }
 
   render() {
-    const histData = this.histGenerator(this.props.data)
     const height = 100
     const width = this.props.width
-    const rectWidth = width / this.binCount
+    const latestHist = this.props.data[this.state.historyIndex]
+    const binsNum = latestHist.length
+    const rectWidth = width / binsNum
+    const totCount = sum(latestHist, d => d.length)
     // TODO improve scale to be consistent and nice
-    const yScale = scaleLinear().range([0, height]).domain([0, .4])
-    const rects = histData.map(
-      (d, i) => <rect key={d.x0} x={i * rectWidth} y={height - yScale(d.length / this.props.data.length)}
-                 width={rectWidth} height={yScale(d.length / this.props.data.length)}
+    const yScale = scaleLinear().range([0, height]).domain([0, .5])
+    const rects = latestHist.map(
+      (d, i) => <rect key={d.x0} x={i * rectWidth}
+                 y={height - yScale(d.length / totCount)}
+                 width={rectWidth} height={yScale(d.length / totCount)}
                  fill={this.props.colorScale(i)} />
     )
     return (
-      <svg width={width} height={height} onDragStart={(e) => e.preventDefault()}>
-        {rects}
-      </svg>
+      <div className="creature-distribution">
+        <svg width={width} height={height} onDragStart={(e) => e.preventDefault()}>
+          {rects}
+        </svg>
+        <input type="range" style={{width: width}} min="0"
+          max={this.props.data.length - 1} value={this.state.historyIndex}
+         onChange={this.handleChange}/>
+      </div>
     )
   }
 }
