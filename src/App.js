@@ -9,6 +9,7 @@ import {randomUniform} from 'd3-random';
 import {getRandomPolygenes, polygenesToPhenotype, polygenesOffspring} from './Polygenes';
 import {pairs} from './CollisionPairs';
 import {randomChoice} from './Utils.js'
+import treesSvg from './imgs/trees.svg'
 
 
 const GAME_PARAMS = {
@@ -18,25 +19,26 @@ const GAME_PARAMS = {
     const minSpeed = maxSpeed / 2
     return randomUniform(minSpeed, maxSpeed)() * randomChoice([-1, 1])
   },
-  moveTick: 70,
+  moveTick: 100,
 
   // creatures' attrs
-  crSize: 9,
+  crSize: 8,
   crColors: scaleSequential(interpolateViridis),
 
   // population params
   crVarNum: 7,
-  crInitCount: 50,
-  crMaxCount: 200,
+  crInitCount: 60,
+  crMaxCount: 100,
   crReproduceProb: .7,
   crDeathProb: .002,
   crMaturityAge: 4,
   populUpdateTick: 1000,
 
   // TODO add field width and height
-  fieldSize: 400,
+  fieldSize: 500,
 }
 
+// TODO перенести всі todo у trello
 // TODO розмір залежний від віку?
 // TODO додати контроль клавіатурою
 // TODO додати перешкоди або окрему смугу для «полювання»
@@ -55,7 +57,6 @@ const GAME_PARAMS = {
 // TODO пересвідчитися, що в популяції на початку є всі можливі алелі
 
 function getRandomVelocity() {
-  const maxSpeed = 2
   return {
     x: GAME_PARAMS.getSpeed(),
     y: GAME_PARAMS.getSpeed(),
@@ -171,12 +172,14 @@ class Simulation extends Component {
   }
 
   start() {
-    this.populUpdateTimerID = setInterval(
-      () => this.updatePopulation(), this.populUpdateTick
-    );
-    this.moveTimerID = setInterval(
-      () => this.moveCreatures(), this.moveTick
-    )
+    if (!this.populUpdateTimerID) {
+      this.populUpdateTimerID = setInterval(
+        this.updatePopulation, this.populUpdateTick
+      )
+    }
+    if (!this.moveTimerID) {
+      this.moveTimerID = setInterval(this.moveCreatures, this.moveTick)
+    }
   }
 
   stop() {
@@ -255,12 +258,23 @@ class Simulation extends Component {
         onDragStart={(e) => e.preventDefault()}>
         <rect width={this.size} height={this.size} x="0" y="0"
           fill={this.colorScale(this.creatureVarsNum / 2)}/>
-        {creatures}
+        <g className="creatures-layer">
+          {creatures}
+        </g>
+        <Obstacles size={this.size}/>
       </svg>
       <CreatureDistribution data={this.state.creatures} width={this.size}
         colorScale={this.colorScale} creatureVarsNum={this.creatureVarsNum}/>
     </div>)
   }
+}
+
+
+function Obstacles(props) {
+  return <g className="obstacle-layer">
+    <image xlinkHref={treesSvg} x="0" y="0" width={props.size}
+      height={props.size}/>
+  </g>
 }
 
 

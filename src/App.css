@@ -36,3 +36,7 @@ article.content {
 svg.simulation {
   cursor: crosshair;
 }
+
+svg g.obstacle-layer, svg g.obstacle-layer image {
+  pointer-events: none;
+}
