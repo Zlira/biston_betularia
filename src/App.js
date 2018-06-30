@@ -35,6 +35,7 @@ const GAME_PARAMS = {
   populUpdateTick: 1000,
 
   fieldSize: 500,
+  fieldColorUpdateTick: 1000,
 }
 
 
@@ -117,9 +118,14 @@ function moveCreature(fieldSize, creature) {
 
 
 class App extends Component {
+  componentDidMount(){
+    document.title = "Biston Betularia"
+  }
+
   render() {
     return (<article className='content'>
-      <Simulation />
+      <Simulation type="stabilizing"/>
+      <Simulation type="directional"/>
     </article>)
   }
 }
@@ -138,6 +144,8 @@ class Simulation extends Component {
     this.maturityAge = GAME_PARAMS.crMaturityAge
     this.populUpdateTick = GAME_PARAMS.populUpdateTick
     this.moveTick = GAME_PARAMS.moveTick
+    // TODO only for the "directional" type?
+    this.fieldColorUpdateTick = GAME_PARAMS.fieldColorUpdateTick
 
     this.colorScale = GAME_PARAMS.crColors.domain([0, (this.creatureVarsNum - 1)])
     this.histGenerator = histogram().value(d => d.phenotype)
@@ -150,17 +158,24 @@ class Simulation extends Component {
         (_, i) => this.newCreature(i)
       ),
       history: [],
+      fieldColorVal: this.creatureVarsNum / 2,
     }
     this.state.history.push(this.histGenerator(this.state.creatures))
 
     this.killCreature = this.killCreature.bind(this)
     this.updatePopulation = this.updatePopulation.bind(this)
     this.moveCreatures = this.moveCreatures.bind(this)
+    this.updateFieldColor = this.updateFieldColor.bind(this)
     this.start = this.start.bind(this)
     this.stop = this.stop.bind(this)
   }
 
+  componentWillUnmount() {
+    this.stop()
+  }
+
   start() {
+    // TODO create smth like tickers attr for class and loop through them here
     this.running = true
     if (!this.populUpdateTimerID) {
       this.populUpdateTimerID = setInterval(
@@ -170,18 +185,22 @@ class Simulation extends Component {
     if (!this.moveTimerID) {
       this.moveTimerID = setInterval(this.moveCreatures, this.moveTick)
     }
+
+    if (!this.fieldColorUpdateTimerID && this.props.type === "directional") {
+      this.fieldColorUpdateTimerID = setInterval(
+        this.updateFieldColor, this.fieldColorUpdateTick,
+      )
+    }
   }
 
   stop() {
     this.running = false
     clearInterval(this.populUpdateTimerID)
     clearInterval(this.moveTimerID)
+    clearInterval(this.fieldColorUpdateTimerID)
     delete this.populUpdateTimerID
     delete this.moveTimerID
-  }
-
-  componentWillUnmount() {
-    this.stop()
+    delete this.fieldColorUpdateTimerID
   }
 
   killCreature(creatureIndex) {
@@ -238,6 +257,18 @@ class Simulation extends Component {
     })
   }
 
+  updateFieldColor() {
+    this.setState((prevState, props) => {
+      const updateIncrement = .01
+      const maxVal = this.colorScale.domain()[1]
+      if (prevState.fieldColorVal >= maxVal) {return}
+      return {
+        fieldColorVal:
+          prevState.fieldColorVal + this.colorScale.domain()[1] * updateIncrement
+      }
+    })
+  }
+
   render() {
     const creatures = this.state.creatures.map(
       creature => <Creature key={creature.id}
@@ -252,7 +283,7 @@ class Simulation extends Component {
       <svg width={this.size} height={this.size} className='simulation'
         onDragStart={(e) => e.preventDefault()}>
         <rect width={this.size} height={this.size} x="0" y="0"
-          fill={this.colorScale(this.creatureVarsNum / 2)}/>
+          fill={this.colorScale(this.state.fieldColorVal)}/>
         <g className="creatures-layer">
           {creatures}
         </g>
