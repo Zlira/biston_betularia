@@ -10,12 +10,13 @@ import {getRandomPolygenes, polygenesToPhenotype, polygenesOffspring} from './Po
 import {pairs} from './CollisionPairs';
 import {randomChoice} from './Utils.js'
 import treesSvg from './imgs/trees.svg'
+import treesLongSvg from './imgs/trees_long.svg'
 
 
 const GAME_PARAMS = {
   // creatures' velocity
   getSpeed: function() {
-    const maxSpeed = 2
+    const maxSpeed =1.5
     const minSpeed = maxSpeed / 2
     return randomUniform(minSpeed, maxSpeed)() * randomChoice([-1, 1])
   },
@@ -48,12 +49,12 @@ function getRandomVelocity() {
 
 // TODO подумай, чи треба тут fieldSize, можливо задавати положення в
 // межах від 0 до 1, а потім множити на fieldSize?
-function getNewCreature(fieldSize, creatureVarsNum, id, phenotype) {
+function getNewCreature(fieldWidth, fieldHeight, creatureVarsNum, id, phenotype) {
   phenotype = phenotype || Math.round(Math.random() * (creatureVarsNum - 1))
   const radius = GAME_PARAMS.crSize
   const coords = {
-    x: Math.random() * (fieldSize - 2 * radius) + radius,
-    y: Math.random() * (fieldSize - 2 * radius) + radius,
+    x: Math.random() * (fieldWidth - 2 * radius) + radius,
+    y: Math.random() * (fieldHeight - 2 * radius) + radius,
   }
   const genotype = getRandomPolygenes((creatureVarsNum - 1) / 2)
   return {
@@ -105,9 +106,9 @@ function handleFieldSideCollision(fieldSize, creature, direction) {
   }
 }
 
-function moveCreature(fieldSize, creature) {
-  let {coordX, velocityX} = handleFieldSideCollision(fieldSize, creature, 'x')
-  let {coordY, velocityY} = handleFieldSideCollision(fieldSize, creature, 'y')
+function moveCreature(fieldWidth, fieldHeight, creature) {
+  let {coordX, velocityX} = handleFieldSideCollision(fieldWidth, creature, 'x')
+  let {coordY, velocityY} = handleFieldSideCollision(fieldHeight, creature, 'y')
 
   return {
     ...creature,
@@ -126,6 +127,7 @@ class App extends Component {
     return (<article className='content'>
       <Simulation type="stabilizing"/>
       <Simulation type="directional"/>
+      <Simulation type="disruptive" height={250} width={700} crVarNum={11} />
     </article>)
   }
 }
@@ -135,8 +137,10 @@ class Simulation extends Component {
     super(props)
     this.running = false
 
-    this.size = GAME_PARAMS.fieldSize
-    this.creatureVarsNum = GAME_PARAMS.crVarNum
+    // TODO configure game params for each type
+    this.width = this.props.width || GAME_PARAMS.fieldSize
+    this.height = this.props.height || GAME_PARAMS.fieldSize
+    this.creatureVarsNum = this.props.crVarNum || GAME_PARAMS.crVarNum
     this.initialCreatureCount = GAME_PARAMS.crInitCount
     this.maxCreatures = GAME_PARAMS.crMaxCount
     this.reproduceProb = GAME_PARAMS.crReproduceProb
@@ -152,7 +156,9 @@ class Simulation extends Component {
       .thresholds(range(1, this.creatureVarsNum))
       .domain([0, this.creatureVarsNum])
 
-    this.newCreature = getNewCreature.bind(null, this.size, this.creatureVarsNum)
+    this.newCreature = getNewCreature.bind(
+      null, this.width, this.height, this.creatureVarsNum
+    )
     this.state = {
       creatures: Array(this.initialCreatureCount).fill().map(
         (_, i) => this.newCreature(i)
@@ -251,7 +257,7 @@ class Simulation extends Component {
       const creatures = prevState.creatures
       const newCreatures = []
       for (let creature of creatures) {
-        newCreatures.push(moveCreature(this.size, creature))
+        newCreatures.push(moveCreature(this.width, this.height, creature))
       }
       return {'creatures': newCreatures}
     })
@@ -280,27 +286,51 @@ class Simulation extends Component {
         <button onClick={this.start}>Старт</button>
         <button onClick={this.stop}>Стоп</button>
       </div>
-      <svg width={this.size} height={this.size} className='simulation'
+      <svg width={this.width} height={this.height} className='simulation'
         onDragStart={(e) => e.preventDefault()}>
-        <rect width={this.size} height={this.size} x="0" y="0"
-          fill={this.colorScale(this.state.fieldColorVal)}/>
+        <FieldBackground width={this.width} height={this.height}
+          type={this.props.type} colorScale={this.colorScale}
+          colorVal={this.state.fieldColorVal}/>
         <g className="creatures-layer">
           {creatures}
         </g>
-        <Obstacles size={this.size}/>
+        <Obstacles width={this.width} height={this.height} type={this.props.type} />
       </svg>
-      <CreatureDistribution data={this.state.history} width={this.size}
+      <CreatureDistribution data={this.state.history} width={this.width}
         colorScale={this.colorScale}/>
     </div>)
   }
 }
 
+function FieldBackground(props) {
+  let bckgrElemes
+  if (props.type === 'disruptive') {
+    const minVal = props.colorScale(props.colorScale.domain()[0] + 2)
+    const maxVal = props.colorScale(props.colorScale.domain()[1] - 2)
+    const stripNum = 10
+    bckgrElemes = []
+    for (let i=0; i < stripNum; i++) {
+      bckgrElemes.push(
+        <rect x={props.width / stripNum * i} y="0" width={props.width/stripNum}
+        height={props.height} fill={i % 2? minVal : maxVal}/>,
+      )
+    }
+  } else {
+    bckgrElemes = [
+      (<rect width={props.width} height={props.height}
+        x="0" y="0" fill={props.colorScale(props.colorVal)}/>)
+    ]
+  }
+  return <g>{bckgrElemes}</g>
+}
+
 
 function Obstacles(props) {
   // TODO ignore clicking on Obstacles but allow clicking on anything else
+  const href = props.type === 'disruptive'? treesLongSvg : treesSvg
   return <g className="obstacle-layer">
-    <image xlinkHref={treesSvg} x="0" y="0" width={props.size}
-      height={props.size}/>
+    <image xlinkHref={href} x="0" y="0" width={props.width}
+      height={props.height}/>
   </g>
 }
 
@@ -332,7 +362,7 @@ class CreatureDistribution extends Component {
 
   render() {
     const height = 100
-    const width = this.props.width
+    const width = this.props.width * .4
     const latestHist = this.props.data[this.state.historyIndex]
     const binsNum = latestHist.length
     const rectWidth = width / binsNum
