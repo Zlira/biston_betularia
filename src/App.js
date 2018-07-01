@@ -1,17 +1,17 @@
 import React, { Component } from 'react';
 import './App.css';
+import 'semantic-ui-css/semantic.min.css';
 
-import {interpolateViridis} from 'd3-scale-chromatic';
-import {scaleSequential, scaleLinear} from 'd3-scale';
-import {histogram, range, sum} from 'd3-array';
+import {interpolateViridis, interpolateRdYlGn, interpolateSpectral} from 'd3-scale-chromatic';
+import {scaleSequential} from 'd3-scale';
+import {histogram, range} from 'd3-array';
 import {randomUniform} from 'd3-random';
 
 import {getRandomPolygenes, polygenesToPhenotype, polygenesOffspring} from './Polygenes';
 import {pairs} from './CollisionPairs';
 import {randomChoice} from './Utils.js'
-import treesSvg from './imgs/trees.svg'
-import treesLongSvg from './imgs/trees_long.svg'
-
+import {CreatureDistribution} from './CreatureDistribution';
+import {Obstacles, FieldBackground} from './FieldComponents';
 
 const GAME_PARAMS = {
   // creatures' velocity
@@ -24,7 +24,8 @@ const GAME_PARAMS = {
 
   // creatures' attrs
   crSize: 8,
-  crColors: scaleSequential(interpolateViridis),
+  // return new scale each time to avoid modifictaion
+  crColors: () => scaleSequential(interpolateSpectral),
 
   // population params
   crVarNum: 9,
@@ -125,9 +126,10 @@ class App extends Component {
 
   render() {
     return (<article className='content'>
-      <Simulation type="stabilizing"/>
-      <Simulation type="directional"/>
-      <Simulation type="disruptive" height={250} width={700} crVarNum={11} />
+      <Simulation type="stabilizing" title="Стабілізуючий добір"/>
+      <Simulation type="directional" title="Pушійний добір"/>
+      <Simulation type="disruptive" title="Дизруптивний добір"
+        height={250} width={700} crVarNum={11} />
     </article>)
   }
 }
@@ -151,7 +153,7 @@ class Simulation extends Component {
     // TODO only for the "directional" type?
     this.fieldColorUpdateTick = GAME_PARAMS.fieldColorUpdateTick
 
-    this.colorScale = GAME_PARAMS.crColors.domain([0, (this.creatureVarsNum - 1)])
+    this.colorScale = GAME_PARAMS.crColors().domain([0, (this.creatureVarsNum - 1)])
     this.histGenerator = histogram().value(d => d.phenotype)
       .thresholds(range(1, this.creatureVarsNum))
       .domain([0, this.creatureVarsNum])
@@ -264,6 +266,7 @@ class Simulation extends Component {
   }
 
   updateFieldColor() {
+    // TODO maybe change not all the way to max value
     this.setState((prevState, props) => {
       const updateIncrement = .01
       const maxVal = this.colorScale.domain()[1]
@@ -281,57 +284,26 @@ class Simulation extends Component {
         colorScale={this.colorScale} creature={creature}
         kill={this.killCreature}/>
     )
-    return (<div>
-      <div>
-        <button onClick={this.start}>Старт</button>
-        <button onClick={this.stop}>Стоп</button>
+    return (<div className="simulation-container">
+      <h2 className="ui header">{this.props.title}</h2>
+      <GameControls start={this.start} stop={this.stop}/>
+      <div className="simulation-components">
+        {/* TODO move this svg to separate component */}
+        <svg width={this.width} height={this.height} className='simulation'
+          onDragStart={(e) => e.preventDefault()}>
+          <FieldBackground width={this.width} height={this.height}
+            type={this.props.type} colorScale={this.colorScale}
+            colorVal={this.state.fieldColorVal}/>
+          <g className="creatures-layer">
+            {creatures}
+          </g>
+          <Obstacles width={this.width} height={this.height} type={this.props.type} />
+        </svg>
+        <CreatureDistribution data={this.state.history} width={180}
+          colorScale={this.colorScale}/>
       </div>
-      <svg width={this.width} height={this.height} className='simulation'
-        onDragStart={(e) => e.preventDefault()}>
-        <FieldBackground width={this.width} height={this.height}
-          type={this.props.type} colorScale={this.colorScale}
-          colorVal={this.state.fieldColorVal}/>
-        <g className="creatures-layer">
-          {creatures}
-        </g>
-        <Obstacles width={this.width} height={this.height} type={this.props.type} />
-      </svg>
-      <CreatureDistribution data={this.state.history} width={this.width}
-        colorScale={this.colorScale}/>
     </div>)
   }
-}
-
-function FieldBackground(props) {
-  let bckgrElemes
-  if (props.type === 'disruptive') {
-    const minVal = props.colorScale(props.colorScale.domain()[0] + 2)
-    const maxVal = props.colorScale(props.colorScale.domain()[1] - 2)
-    const stripNum = 10
-    bckgrElemes = []
-    for (let i=0; i < stripNum; i++) {
-      bckgrElemes.push(
-        <rect x={props.width / stripNum * i} y="0" width={props.width/stripNum}
-        height={props.height} fill={i % 2? minVal : maxVal}/>,
-      )
-    }
-  } else {
-    bckgrElemes = [
-      (<rect width={props.width} height={props.height}
-        x="0" y="0" fill={props.colorScale(props.colorVal)}/>)
-    ]
-  }
-  return <g>{bckgrElemes}</g>
-}
-
-
-function Obstacles(props) {
-  // TODO ignore clicking on Obstacles but allow clicking on anything else
-  const href = props.type === 'disruptive'? treesLongSvg : treesSvg
-  return <g className="obstacle-layer">
-    <image xlinkHref={href} x="0" y="0" width={props.width}
-      height={props.height}/>
-  </g>
 }
 
 
@@ -348,44 +320,18 @@ class Creature extends Component {
 }
 
 
-class CreatureDistribution extends Component {
-  constructor(props) {
-    super(props)
-    this.state = {historyIndex: 0}
-
-    this.handleChange = this.handleChange.bind(this)
-  }
-
-  handleChange(event) {
-    this.setState({historyIndex: event.target.value})
-  }
-
-  render() {
-    const height = 100
-    const width = this.props.width * .4
-    const latestHist = this.props.data[this.state.historyIndex]
-    const binsNum = latestHist.length
-    const rectWidth = width / binsNum
-    const totCount = sum(latestHist, d => d.length)
-    // TODO improve scale to be consistent and nice
-    const yScale = scaleLinear().range([0, height]).domain([0, .5])
-    const rects = latestHist.map(
-      (d, i) => <rect key={d.x0} x={i * rectWidth}
-                 y={height - yScale(d.length / totCount)}
-                 width={rectWidth} height={yScale(d.length / totCount)}
-                 fill={this.props.colorScale(i)} />
-    )
-    return (
-      <div className="creature-distribution">
-        <svg width={width} height={height} onDragStart={(e) => e.preventDefault()}>
-          {rects}
-        </svg>
-        <input type="range" style={{width: width}} min="0"
-          max={this.props.data.length - 1} value={this.state.historyIndex}
-         onChange={this.handleChange}/>
-      </div>
-    )
-  }
+function GameControls(props) {
+  return (
+    <div className='simulation-controls'>
+      <button onClick={props.start} className="ui labeled icon button">
+       Старт<i className="play icon"></i>
+      </button>
+      <button onClick={props.stop} className="ui labeled icon button">
+       Стоп<i className="stop icon"></i>
+      </button>
+    </div>
+  )
 }
+
 
 export default App;
